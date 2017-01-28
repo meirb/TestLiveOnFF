@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<!-- saved from url=(0042)https://oskbor.github.io/ie_5s_buffer.html -->
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+<title>IE delay repro</title>
+<script type="text/javascript" src="chrome-extension://aadgmnobpdmgmigaicncghmmoeflnamj/ng-inspector.js"></script></head>
+<body>
+<video id="app" width="400" height="300" src="blob:https://oskbor.github.io/d7c6c9b5-b554-4231-8472-202644afd42e"></video><br>
+<button onclick="onPlay()">Play!</button>
+<div id="time">66 ms</div>
+<script type="text/javascript">
+
+var video = document.getElementById('app');
+
+window.MediaSource = window.MediaSource || window.WebKitMediaSource;
+if (!window.MediaSource) {
+  console.log('MediaSource API is not available');
+}
+var startTime = 0;
+var stopTimer = function () {
+  document.getElementById('time').innerHTML = '' + ((new Date()).getTime() - startTime) + ' ms';
+  video.removeEventListener('playing', stopTimer);
+};
+var mediaSource = new window.MediaSource();
+
+video.src = window.URL.createObjectURL(mediaSource);
+video.addEventListener('playing', stopTimer);
+var sourceBuffer;
+var buffer = []; //Frames are appended here when they 'arrive' via setInterval
+var readFromBuffer = function () {
+    // Returns if the buffer is empty or has state updating
+    if (buffer.length === 0 || !sourceBuffer || sourceBuffer.updating) {
+      return;
+    }
+    try {
+      var data = buffer.shift();
+      sourceBuffer.appendBuffer(data);
+    } catch (e) {
+      console.log(e);
+    }
+  };
+mediaSource.addEventListener('sourceopen', function () {
+  console.log('source open');
+  sourceBuffer = mediaSource.addSourceBuffer('video/mp4; codecs="avc1.42E01E"');
+  mediaSource.duration = Infinity;
+  sourceBuffer.addEventListener('updateend', readFromBuffer);
+});
+
+function readFilesFrgments(){
+  let numOfFrames = 300;
+  let Promises = [];
+  fileFrames = [];
+  for (let curFrame = 0; curFrame < numOfFrames; ++curFrame){
+    var path = 'frames\\Framef-';
+    let promise = fetch(path + curFrame + '.mp4').then(function(response) {
+      return response.arrayBuffer();
+    })
+    .then(function(buf) {
+      var length = buf.byteLength;
+      console.log("Got buffer:" + length);
+      return buf;
+      //fileSourceBuffer.appendBuffer(buf);
+    }).catch(function(err){
+      console.log(err);
+    });
+    Promises.push(promise);
+  }
+  return Promise.all(Promises);
+}
+
+
+
+function onPlay(){
+  var i = 0;
+  var curMode = sourceBuffer.mode;
+  if (curMode == 'segments') {
+    sourceBuffer.mode = 'sequence';
+  }
+  mediaSource.addEventListener('error', function (err) {
+    console.error('fileMediaSource error ' + err);
+  }); 
+  sourceBuffer.addEventListener('error', function (err) {
+    console.error('sourceBuffer error ' + err);
+  }); 
+  video.play();
+  readFilesFrgments().then(function(buffers){
+      var interval = setInterval(function () {
+          if (i < buffers.length){
+            console.info("appendBuffer - " + i);
+            sourceBuffer.appendBuffer(buffers[i++]);
+          }
+      }, 30);
+  });
+}
+
+</script>
+
+<div class="fps" style="display: none;"><canvas width="150" height="60" class="fps__canvas"></canvas></div></body></html>
